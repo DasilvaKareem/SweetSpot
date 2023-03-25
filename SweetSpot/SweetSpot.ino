@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #if defined(ESP32)
   #include <WiFi.h>
 #elif defined(ESP8266)
@@ -31,8 +33,8 @@ using namespace std;
 
 
 // Firebase Realtime Database credentials
-#define WIFI_SSID "Belltower Coffeehouse"
-#define WIFI_PASSWORD "901coffeehouse"
+#define WIFI_SSID "Moana's Fish Tank"
+#define WIFI_PASSWORD "You'reWelcome"
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyDbCwzqfszPXF2W4NCUBki6Vnu6-YNUu6E"
@@ -139,6 +141,10 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   Serial.print(" SSID: ");
   printDataSpan(26, SSID_length, snifferPacket->data);
 
+  unsigned long currentTimestamp = millis() / 1000;
+  Serial.println("Timestamp:");
+  Serial.print(currentTimestamp + "GRACE :)");
+
   //Serial.println();
 }
 std::set<String> macAddresses;
@@ -208,6 +214,22 @@ void channelHop()
 #define DISABLE 0
 #define ENABLE  1
 
+/* Get TimeStamp*/
+
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+
+// Variable to save current epoch time
+unsigned long epochTime; 
+
+// Function that gets current epoch time
+unsigned long getTime() {
+  timeClient.update();
+  unsigned long now = timeClient.getEpochTime();
+  return now;
+}
+
 void setup() {
   // set the WiFi chip to "promiscuous" mode aka monitor mode
   Serial.begin(115200);
@@ -261,9 +283,11 @@ void setup() {
       Serial.println("REASON: " + fbdo.errorReason());
     }
   
+  /*
   wifi_set_promiscuous_rx_cb(sniffer_callback);
   delay(10);
   wifi_promiscuous_enable(ENABLE);
+  */
 
   // setup the channel hoping callback timer
   os_timer_disarm(&channelHop_timer);
@@ -275,9 +299,14 @@ void setup() {
 void loop() {
   
   delay(10);
+
+  epochTime = getTime();
+  Serial.print("Epoch Time: ");
+  Serial.println(epochTime);
+  delay(10);
  
  
-   if (Firebase.signUp(&config, &auth, "", "")){
+ /*  if (Firebase.signUp(&config, &auth, "", "")){
     Serial.println("ok");
     signupOK = true;
   }
@@ -286,7 +315,7 @@ void loop() {
   }
 
   /* Assign the callback function for the long running token generation task */
-  config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
+/*  config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
   
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
@@ -302,6 +331,6 @@ void loop() {
       Serial.println("REASON: " + fbdo.errorReason());
     }
     
-
+*/
 
 }
