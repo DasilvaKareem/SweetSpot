@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
 #if defined(ESP32)
   #include <WiFi.h>
 #elif defined(ESP8266)
@@ -11,6 +9,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
 using namespace std;
 #include <Firebase_ESP_Client.h>
@@ -33,8 +33,8 @@ using namespace std;
 
 
 // Firebase Realtime Database credentials
-#define WIFI_SSID "Moana's Fish Tank"
-#define WIFI_PASSWORD "You'reWelcome"
+#define WIFI_SSID "Pattonpartyof8"
+#define WIFI_PASSWORD "sherry1231"
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyDbCwzqfszPXF2W4NCUBki6Vnu6-YNUu6E"
@@ -47,7 +47,7 @@ FirebaseConfig config;
 unsigned long sendDataPrevMillis = 0;
 
 bool signupOK = false;
-
+bool readyToPush = false;
 struct RxControl {
  signed rssi:8; // signal intensity of packet
  unsigned rate:4;
@@ -75,12 +75,23 @@ struct RxControl {
  unsigned:12;
 };
 
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org");
+
 struct SnifferPacket{
     struct RxControl rx_ctrl;
     uint8_t data[DATA_LENGTH];
     uint16_t cnt;
     uint16_t len;
 };
+
+struct MacAddressData {
+  std::string macAddress;
+  unsigned long timestamp;
+};
+ 
+std::vector<MacAddressData> macAddressList;
+
 int macaddressCount = 0;
 // Declare each custom function (excluding built-in, such as setup and loop) before it will be called.
 // https://docs.platformio.org/en/latest/faq.html#convert-arduino-file-to-c-manually
@@ -92,7 +103,7 @@ void channelHop();
 
 // A list of known OUI values assigned by the IEEE
 std::vector<int> knownOUIs = {0x0000C0, 0x08002B, 0x080030};
-
+unsigned long epochTime;
 bool isRandomizedMAC(std::string macAddress) {
     // Extract the first 24 bits from the MAC address
     std::string ouiStr = macAddress.substr(0, 8);
@@ -110,6 +121,13 @@ bool isRandomizedMAC(std::string macAddress) {
     return true;
 }
 
+// Function that gets current epoch time
+unsigned long getTime() {
+  timeClient.begin();
+  timeClient.update();
+  unsigned long now = timeClient.getEpochTime();
+  return now;
+}
 static void showMetadata(SnifferPacket *snifferPacket) {
 
   unsigned int frameControl = ((unsigned int)snifferPacket->data[1] << 8) + snifferPacket->data[0];
@@ -141,24 +159,32 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   Serial.print(" SSID: ");
   printDataSpan(26, SSID_length, snifferPacket->data);
 
-  unsigned long currentTimestamp = millis() / 1000;
-  Serial.println("Timestamp:");
-  Serial.print(currentTimestamp + "GRACE :)");
-
   //Serial.println();
+
 }
-std::set<String> macAddresses;
+
 /**
  * Callback for promiscuous mode
  */
 static void ICACHE_FLASH_ATTR sniffer_callback(uint8_t *buffer, uint16_t length) {
    
     // Get MAC address of the device broadcasting the beacon frame
+    
    
   struct SnifferPacket *snifferPacket = (struct SnifferPacket*) buffer;
   showMetadata(snifferPacket);
-}
 
+
+
+}
+bool isMacAddressInList(const std::string& macAddress, const std::vector<MacAddressData>& macAddressList) {
+  for (const auto& entry : macAddressList) {
+    if (entry.macAddress == macAddress) {
+      return true;
+    }
+  }
+  return false;
+}
 static void printDataSpan(uint16_t start, uint16_t size, uint8_t* data) {
   for(uint16_t i = start; i < DATA_LENGTH && i < start+size; i++) {
     Serial.write(data[i]);
@@ -176,23 +202,29 @@ std::string stdStr(macAddress.c_str());
 std::string newMac = stdStr;
 Serial.print(macAddress);
     if (isRandomizedMAC(newMac)) {
-       Serial.print(" Randomized Mac Address ");
+       Serial.print("  ");
     } else {
        //Serial.println("not a random Mac Address");
-       Serial.println(macAddress);
+      // Serial.println(macAddress);
     }
-   if (macAddresses.count(macAddress) == 0) {
+  if (!isMacAddressInList(newMac, macAddressList)) {
       // If not, add it to the set and print it
-      macAddresses.insert(macAddress);
+       unsigned long currentTimestamp = millis() / 1000;
+ 
+      MacAddressData newEntry;  
+      newEntry.macAddress = newMac;
+     newEntry.timestamp = currentTimestamp;
+      macAddressList.push_back(newEntry);
+      
       Serial.println(" Unique Mac Address ");
      // Serial.println(macAddress);
     } else {
-      Serial.print(" New Mac address found ");
-     // Serial.println(macAddress);
+      //Serial.print(" New Mac address found ");
+      //Serial.println(macAddress);
     }
 
 
- //  Serial.println();
+   Serial.println(macAddressList.size());
 }
 
 #define CHANNEL_HOP_INTERVAL_MS   1000
@@ -203,32 +235,19 @@ static os_timer_t channelHop_timer;
  */
 void channelHop()
 {
-  // hoping channels 1-13
+ if (readyToPush == false) {
+    // hoping channels 1-13
   uint8 new_channel = wifi_get_channel() + 1;
   if (new_channel > 13) {
     new_channel = 1;
   }
   wifi_set_channel(new_channel);
+ }
+
 }
 
 #define DISABLE 0
 #define ENABLE  1
-
-/* Get TimeStamp*/
-
-// Define NTP Client to get time
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
-
-// Variable to save current epoch time
-unsigned long epochTime; 
-
-// Function that gets current epoch time
-unsigned long getTime() {
-  timeClient.update();
-  unsigned long now = timeClient.getEpochTime();
-  return now;
-}
 
 void setup() {
   // set the WiFi chip to "promiscuous" mode aka monitor mode
@@ -248,46 +267,30 @@ void setup() {
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
   Serial.println();
-
+ timeClient.begin();
 
     /* Assign the api key (required) */
   config.api_key = API_KEY;
 
   /* Assign the RTDB URL (required) */
   config.database_url = DATABASE_URL;
-
+auth.user.email = "kareemdasilva@gmail.com";
+auth.user.password = "sweetspot";
 
 /* Sign up */
-  if (Firebase.signUp(&config, &auth, "", "")){
-    Serial.println("ok");
-    signupOK = true;
-  }
-  else{
-    Serial.printf("%s\n", config.signer.signupError.message.c_str());
-  }
 
-  /* Assign the callback function for the long running token generation task */
-  config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
-  
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
-    sendDataPrevMillis = millis();
-    // Write an Int number on the database path test/int
-    if (Firebase.RTDB.setInt(&fbdo, "MacAddresses/int", 350)){
-      Serial.println("PASSED");
-      Serial.println("PATH: " + fbdo.dataPath());
-      Serial.println("TYPE: " + fbdo.dataType());
-    }
-    else {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-  
-  /*
+ 
   wifi_set_promiscuous_rx_cb(sniffer_callback);
   delay(10);
   wifi_promiscuous_enable(ENABLE);
-  */
+  
+
+
+  /* Assign the callback function for the long running token generation task */
+ // config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
+  
+
+
 
   // setup the channel hoping callback timer
   os_timer_disarm(&channelHop_timer);
@@ -297,40 +300,45 @@ void setup() {
 }
 
 void loop() {
-  
+  readyToPush = true;
+  delay(10000);
+  wifi_set_opmode(STATION_MODE);
+  wifi_set_channel(1);
+  wifi_promiscuous_enable(DISABLE);
   delay(10);
-
-  epochTime = getTime();
-  Serial.print("Epoch Time: ");
-  Serial.println(epochTime);
-  delay(10);
- 
- 
- /*  if (Firebase.signUp(&config, &auth, "", "")){
-    Serial.println("ok");
-    signupOK = true;
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED){
+    Serial.print(".");
+    delay(300);
   }
-  else{
-    Serial.printf("%s\n", config.signer.signupError.message.c_str());
-  }
+  Serial.println();
+  Serial.print(" Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
 
-  /* Assign the callback function for the long running token generation task */
-/*  config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
-  
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
+         Firebase.begin(&config, &auth);
+ timeClient.update();
+ if (Firebase.ready()){
     sendDataPrevMillis = millis();
     // Write an Int number on the database path test/int
-    if (Firebase.RTDB.setInt(&fbdo, "MacAddresses/int", macaddressCount)){
-      Serial.println("PASSED");
-      Serial.println("PATH: " + fbdo.dataPath());
-      Serial.println("TYPE: " + fbdo.dataType());
-    }
-    else {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-    
-*/
+  
+   for (int i = 0; i < macAddressList.size(); i++) {
+  MacAddressData macAddress = macAddressList[i];
+  String mac = macAddress.macAddress.c_str();
+  String path = "mac_addresses/" + mac;
+  macAddress.timestamp = getTime();
+   Firebase.RTDB.setString(&fbdo,path + "/macAddress", macAddress.macAddress);
+  Firebase.RTDB.setInt(&fbdo,path + "/timestamp", macAddress.timestamp);
+}
+ }else {
+   Serial.println("Error connecting to firebase");
+  }
 
+readyToPush = false;
+
+  wifi_set_promiscuous_rx_cb(sniffer_callback);
+  delay(10);
+  wifi_promiscuous_enable(ENABLE);
+  
 }
