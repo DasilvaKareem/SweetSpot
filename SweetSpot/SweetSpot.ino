@@ -33,8 +33,8 @@ using namespace std;
 
 
 // Firebase Realtime Database credentials
-#define WIFI_SSID "Pattonpartyof8"
-#define WIFI_PASSWORD "sherry1231"
+#define WIFI_SSID "Communitech"
+#define WIFI_PASSWORD "HighlandBooks"
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyDbCwzqfszPXF2W4NCUBki6Vnu6-YNUu6E"
