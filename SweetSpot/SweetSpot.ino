@@ -12,6 +12,7 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
+
 using namespace std;
 #include <Firebase_ESP_Client.h>
 
@@ -163,6 +164,8 @@ static void showMetadata(SnifferPacket *snifferPacket) {
 
 }
 
+
+
 /**
  * Callback for promiscuous mode
  */
@@ -298,6 +301,15 @@ auth.user.password = "sweetspot";
   os_timer_arm(&channelHop_timer, CHANNEL_HOP_INTERVAL_MS, 1);
 
 }
+String generatePushId() {
+  String chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  String pushId = "";
+  for (int i = 0; i < 20; i++) {
+    int randomCharIndex = random(chars.length());
+    pushId += chars.charAt(randomCharIndex);
+  }
+  return pushId;
+}
 
 void loop() {
   readyToPush = true;
@@ -326,7 +338,9 @@ void loop() {
    for (int i = 0; i < macAddressList.size(); i++) {
   MacAddressData macAddress = macAddressList[i];
   String mac = macAddress.macAddress.c_str();
-  String path = "mac_addresses/" + mac;
+  String pushID = generatePushId();
+   String path = "mac_addresses/" + pushID;
+
   macAddress.timestamp = getTime();
    Firebase.RTDB.setString(&fbdo,path + "/macAddress", macAddress.macAddress);
   Firebase.RTDB.setInt(&fbdo,path + "/timestamp", macAddress.timestamp);
