@@ -38,7 +38,7 @@ using namespace std;
 #define WIFI_PASSWORD "HighlandBooks"
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyDbCwzqfszPXF2W4NCUBki6Vnu6-YNUu6E"
+#define API_KEY ""
 
 // Insert RTDB URLefine the RTDB URL */
 #define DATABASE_URL "https://sweetspot-222116-default-rtdb.firebaseio.com" 
